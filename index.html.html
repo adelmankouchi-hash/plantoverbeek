@@ -1,0 +1,339 @@
+
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning Collaboratif Profs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --primary: #6366f1;
+            --bg-main: #fcfcfd;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-main);
+            color: #1e293b;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        .calendar-container {
+            display: grid;
+            grid-template-columns: 100px repeat(5, 1fr);
+            min-width: 900px;
+        }
+
+        .header-cell {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #64748b;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .time-cell {
+            height: 80px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-end;
+            padding-right: 1.5rem;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 500;
+            border-right: 1px solid #f1f5f9;
+        }
+
+        .slot {
+            height: 80px;
+            border-bottom: 1px solid #f1f5f9;
+            border-right: 1px solid #f1f5f9;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .slot:hover {
+            background-color: rgba(99, 102, 241, 0.03);
+            cursor: crosshair;
+        }
+
+        .event-card {
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            border-radius: 10px;
+            padding: 8px;
+            font-size: 0.75rem;
+            color: white;
+            z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        #notification-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 100;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #notification-toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="p-2 bg-indigo-600 rounded-xl shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="text-white w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <span id="status-badge" class="text-sm font-bold text-indigo-600 tracking-wider uppercase">Mode Local Actif</span>
+                </div>
+                <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">Planning de l'École</h1>
+            </div>
+
+            <div class="flex items-center gap-3 no-print">
+                <button onclick="window.print()" class="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm">
+                    Imprimer
+                </button>
+            </div>
+        </header>
+
+        <div class="glass-panel rounded-[32px] shadow-2xl overflow-hidden mb-10">
+            <div class="overflow-x-auto">
+                <div class="calendar-container border-b border-slate-100">
+                    <div class="header-cell">Heure</div>
+                    <div class="header-cell">Lundi</div>
+                    <div class="header-cell">Mardi</div>
+                    <div class="header-cell">Mercredi</div>
+                    <div class="header-cell">Jeudi</div>
+                    <div class="header-cell">Vendredi</div>
+                </div>
+                <div id="calendar-body" class="calendar-container relative min-h-[840px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[28px] max-w-md w-full p-8 shadow-2xl border border-slate-100">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modal-title" class="text-2xl font-bold text-slate-900">Activité</h2>
+                <button onclick="closeModal()" class="p-2 hover:bg-slate-100 rounded-full">✕</button>
+            </div>
+
+            <form id="event-form" class="space-y-5">
+                <input type="hidden" id="event-id">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Titre du cours</label>
+                    <input type="text" id="event-title-input" required placeholder="Ex: Mathématiques" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Jour</label>
+                        <select id="event-day" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <option value="1">Lundi</option>
+                            <option value="2">Mardi</option>
+                            <option value="3">Mercredi</option>
+                            <option value="4">Jeudi</option>
+                            <option value="5">Vendredi</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Couleur</label>
+                        <select id="event-color-input" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <option value="bg-indigo-500">Bleu</option>
+                            <option value="bg-rose-500">Rouge</option>
+                            <option value="bg-emerald-500">Vert</option>
+                            <option value="bg-amber-500">Orange</option>
+                            <option value="bg-violet-500">Violet</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Début</label>
+                        <select id="event-start-time" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Fin</label>
+                        <select id="event-end-time" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl"></select>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex flex-col gap-3">
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-transform">
+                        Enregistrer
+                    </button>
+                    <button type="button" id="btn-delete" class="hidden w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-2xl transition-all">
+                        Supprimer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification-toast" class="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/10 max-w-sm">
+        <p id="toast-content" class="text-sm font-medium"></p>
+    </div>
+
+    <script>
+        // Logique de stockage : LocalStorage par défaut
+        let events = JSON.parse(localStorage.getItem('planning_events') || '[]');
+
+        const calendarBody = document.getElementById('calendar-body');
+        const startTimeSelect = document.getElementById('event-start-time');
+        const endTimeSelect = document.getElementById('event-end-time');
+        const modal = document.getElementById('modal');
+        const eventForm = document.getElementById('event-form');
+        const btnDelete = document.getElementById('btn-delete');
+
+        function initGrid() {
+            calendarBody.innerHTML = '';
+            for (let h = 7.5; h < 18.5; h += 0.5) {
+                const timeCell = document.createElement('div');
+                timeCell.className = 'time-cell';
+                if (h % 1 === 0 || h === 7.5) timeCell.textContent = formatTime(h);
+                calendarBody.appendChild(timeCell);
+
+                for (let d = 1; d <= 5; d++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    slot.onclick = () => openCreateModal(d, h);
+                    calendarBody.appendChild(slot);
+                    slot.dataset.day = d;
+                    slot.dataset.time = h;
+                }
+
+                // Remplissage selects
+                const optS = document.createElement('option');
+                optS.value = h; optS.textContent = formatTime(h);
+                startTimeSelect.appendChild(optS);
+                
+                const optE = document.createElement('option');
+                optE.value = h + 0.5; optE.textContent = formatTime(h+0.5);
+                endTimeSelect.appendChild(optE);
+            }
+            renderEvents();
+        }
+
+        function formatTime(dec) {
+            const h = Math.floor(dec);
+            const m = (dec % 1) === 0.5 ? '30' : '00';
+            return `${h.toString().padStart(2, '0')}:${m}`;
+        }
+
+        function renderEvents() {
+            document.querySelectorAll('.event-card').forEach(c => c.remove());
+            events.forEach(ev => {
+                const slot = document.querySelector(`.slot[data-day="${ev.day}"][data-time="${ev.startTime}"]`);
+                if (slot) {
+                    const card = document.createElement('div');
+                    card.className = `event-card ${ev.color}`;
+                    card.style.height = `${(ev.duration / 60) * 80 - 8}px`;
+                    card.style.top = '4px';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <span class="text-[9px] font-bold opacity-80">${formatTime(ev.startTime)}</span>
+                        </div>
+                        <h3 class="font-bold leading-tight truncate mt-1 text-xs">${ev.title}</h3>
+                    `;
+                    card.onclick = (e) => { e.stopPropagation(); openEditModal(ev); };
+                    slot.appendChild(card);
+                }
+            });
+            localStorage.setItem('planning_events', JSON.stringify(events));
+        }
+
+        window.openCreateModal = (day, time) => {
+            document.getElementById('event-id').value = "";
+            document.getElementById('event-title-input').value = "";
+            document.getElementById('event-day').value = day;
+            document.getElementById('event-start-time').value = time;
+            document.getElementById('event-end-time').value = time + 1;
+            btnDelete.classList.add('hidden');
+            modal.classList.remove('hidden');
+        };
+
+        window.openEditModal = (ev) => {
+            document.getElementById('event-id').value = ev.id;
+            document.getElementById('event-title-input').value = ev.title;
+            document.getElementById('event-day').value = ev.day;
+            document.getElementById('event-start-time').value = ev.startTime;
+            document.getElementById('event-end-time').value = ev.startTime + (ev.duration/60);
+            document.getElementById('event-color-input').value = ev.color;
+            btnDelete.classList.remove('hidden');
+            btnDelete.onclick = () => {
+                events = events.filter(e => e.id !== ev.id);
+                closeModal();
+                renderEvents();
+            };
+            modal.classList.remove('hidden');
+        };
+
+        eventForm.onsubmit = (e) => {
+            e.preventDefault();
+            const start = parseFloat(document.getElementById('event-start-time').value);
+            const end = parseFloat(document.getElementById('event-end-time').value);
+            if (end <= start) return;
+
+            const id = document.getElementById('event-id').value || Date.now().toString();
+            const newEvent = {
+                id,
+                title: document.getElementById('event-title-input').value,
+                day: parseInt(document.getElementById('event-day').value),
+                startTime: start,
+                duration: (end - start) * 60,
+                color: document.getElementById('event-color-input').value
+            };
+
+            // Mise à jour ou ajout
+            const idx = events.findIndex(e => e.id === id);
+            if (idx > -1) events[idx] = newEvent;
+            else events.push(newEvent);
+
+            closeModal();
+            renderEvents();
+            showToast("Planning mis à jour !");
+        };
+
+        window.closeModal = () => modal.classList.add('hidden');
+        function showToast(txt) {
+            document.getElementById('toast-content').textContent = txt;
+            const t = document.getElementById('notification-toast');
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        initGrid();
+    </script>
+</body>
+</html>
